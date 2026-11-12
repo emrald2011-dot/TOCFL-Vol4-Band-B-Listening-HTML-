@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>登入｜TOCFL 第四輯 聽力</title>
+<style>
+:root{--bg:#f3f6f4;--card:#fff;--ink:#1f2a24;--sub:#5b6b62;--pri:#2f6b4f;--line:#d5ded9;--err:#b3261e}
+@media (prefers-color-scheme:dark){:root{--bg:#141a17;--card:#1e2622;--ink:#e6ece8;--sub:#9fb0a7;--pri:#5fae88;--line:#34413a;--err:#ff8a80}}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px;background:var(--bg);color:var(--ink);font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif}
+.card{width:100%;max-width:380px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:28px 24px;box-shadow:0 6px 24px rgba(0,0,0,.06)}
+h1{font-size:20px;margin:0 0 4px}
+.sub{color:var(--sub);font-size:14px;margin:0 0 22px}
+label{display:block;font-size:14px;margin:14px 0 6px}
+input{width:100%;padding:11px 12px;font:inherit;font-size:16px;border:1px solid var(--line);border-radius:10px;background:transparent;color:var(--ink)}
+input:focus{outline:2px solid var(--pri);border-color:transparent}
+button{width:100%;margin-top:22px;padding:12px;font:inherit;font-size:16px;border:0;border-radius:10px;background:var(--pri);color:#fff;cursor:pointer}
+button:disabled{opacity:.6;cursor:wait}
+.err{color:var(--err);font-size:14px;min-height:20px;margin-top:12px}
+</style>
+</head>
+<body>
+<form class="card" id="f" autocomplete="on">
+  <h1>TOCFL 第四輯 聽力（B 級）</h1>
+  <p class="sub">請登入後使用教材</p>
+  <label for="u">帳號</label>
+  <input id="u" name="username" autocomplete="username" required>
+  <label for="p">密碼</label>
+  <input id="p" name="password" type="password" autocomplete="current-password" required>
+  <button id="b" type="submit">登入</button>
+  <div class="err" id="e" role="alert"></div>
+</form>
+<script>
+const P=/*PAYLOAD*/null;
+const KEY='tocfl4-k';
+const b64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+const enc=new TextEncoder();
+async function openWith(raw){
+  const k=await crypto.subtle.importKey('raw',raw,'AES-CBC',false,['decrypt']);
+  const pt=await crypto.subtle.decrypt({name:'AES-CBC',iv:b64(P.iv)},k,b64(P.ct));
+  return new TextDecoder().decode(pt);
+}
+function show(html,raw){
+  try{sessionStorage.setItem(KEY,btoa(String.fromCharCode(...raw)))}catch(_){}
+  document.open();document.write(html);document.close();
+  const t=html.match(/<title>([^<]*)<\/title>/i);if(t)document.title=t[1];
+  const x=document.createElement('button');
+  x.textContent='登出';x.title='登出';
+  x.style.cssText='position:fixed;right:12px;bottom:12px;z-index:9999;padding:6px 14px;border-radius:999px;border:1px solid #2f6b4f;background:#fff;color:#2f6b4f;font-size:14px;cursor:pointer';
+  x.onclick=()=>{try{sessionStorage.removeItem(KEY)}catch(_){}location.reload()};
+  (document.body||document.documentElement).appendChild(x);
+}
+async function unlock(user,pass){
+  const base=await crypto.subtle.importKey('raw',enc.encode(user+'\n'+pass),'PBKDF2',false,['deriveKey']);
+  const dk=await crypto.subtle.deriveKey({name:'PBKDF2',salt:b64(P.salt),iterations:P.iter,hash:'SHA-256'},base,{name:'AES-CBC',length:256},false,['decrypt']);
+  const magic=b64(P.magic);
+  for(const w of P.keys){
+    try{
+      const r=new Uint8Array(await crypto.subtle.decrypt({name:'AES-CBC',iv:b64(w.iv)},dk,b64(w.ct)));
+      if(r.length===48&&r.slice(32).every((v,i)=>v===magic[i])) return r.slice(0,32);
+    }catch(_){}
+  }
+  return null;
+}
+(async()=>{
+  let s=null;try{s=sessionStorage.getItem(KEY)}catch(_){}
+  if(s){try{const raw=b64(s);show(await openWith(raw),raw);return}catch(_){try{sessionStorage.removeItem(KEY)}catch(_){}}}
+  document.getElementById('u').focus();
+})();
+document.getElementById('f').addEventListener('submit',async ev=>{
+  ev.preventDefault();
+  const b=document.getElementById('b'),e=document.getElementById('e');
+  if(!window.crypto||!crypto.subtle){e.textContent='此瀏覽器不支援，請改用最新版 Chrome、Edge 或 Safari。';return}
+  b.disabled=true;b.textContent='驗證中…';e.textContent='';
+  try{
+    const raw=await unlock(document.getElementById('u').value.trim(),document.getElementById('p').value);
+    if(!raw){e.textContent='帳號或密碼錯誤';b.disabled=false;b.textContent='登入';return}
+    show(await openWith(raw),raw);
+  }catch(err){e.textContent='登入失敗：'+err.message;b.disabled=false;b.textContent='登入'}
+});
+</script>
+</body>
+</html>
